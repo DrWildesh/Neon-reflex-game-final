@@ -388,11 +388,11 @@
      at the right moments without touching any other game code.
   ===================================================================== */
   
-
-  const AD_STRATEGY = {
-  ADMOB_BANNER_ID: 'ca-app-pub-3940256099942544/6300978111',       
-  ADMOB_INTERSTITIAL_ID: 'ca-app-pub-3940256099942544/1033173712',
-  ADMOB_REWARDED_ID: 'ca-app-pub-3940256099942544/5224354917'     // Official Google Test Rewarded Ad ID
+const AD_STRATEGY = {
+  // 🛠️ Swap these with your actual live production Ad Unit IDs
+  ADMOB_BANNER_ID: 'ca-app-pub-7429886592096633/5636722019,       
+  ADMOB_INTERSTITIAL_ID: 'ca-app-pub-7429886592096633/2678164994',
+  ADMOB_REWARDED_ID: 'ca-app-pub-7429886592096633/7738919984'
 };
 
 const AdManager = {
@@ -409,15 +409,19 @@ const AdManager = {
     
     try {
       await AdMob.initialize({ 
-      initializeForTesting: true,
-      testingDevices: ['6efb81b2c80e414991bab0d8b480f166'] 
-    });
+        // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
+        initializeForTesting: false,
+        // ✅ YOUR SAFE TEST DOOR: Because your phone ID is registered here,
+        // Google will automatically give YOU test ads, while real users get live ads.
+        testingDevices: ['6efb81b2c80e414991bab0d8b480f166'] 
+      });
+
       // Auto-show standard adaptive banner
       await AdMob.showBanner({
         adId: AD_STRATEGY.ADMOB_BANNER_ID, 
         adSize: 'ADAPTIVE_BANNER',
         position: 'BOTTOM_CENTER',
-        isTesting: true 
+        isTesting: false // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
       });
 
       // Background preload multi-screen ads
@@ -433,7 +437,10 @@ const AdManager = {
     const AdMob = this._admob();
     if (!AdMob) return;
     try {
-      await AdMob.prepareInterstitial({ adId: AD_STRATEGY.ADMOB_INTERSTITIAL_ID, isTesting: true });
+      await AdMob.prepareInterstitial({ 
+        adId: AD_STRATEGY.ADMOB_INTERSTITIAL_ID, 
+        isTesting: false // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
+      });
     } catch(e) {}
   },
 
@@ -460,7 +467,7 @@ const AdManager = {
       // Requests and holds a single full-screen rewarded ad unit in device memory
       await AdMob.prepareRewardVideoAd({ 
         adId: AD_STRATEGY.ADMOB_REWARDED_ID, 
-        isTesting: true 
+        isTesting: false // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
       });
       console.log("Rewarded ad preloaded successfully.");
     } catch(e) {
@@ -504,12 +511,13 @@ const AdManager = {
       if (onAdFailedOrClosed) onAdFailedOrClosed();
     }
   }
-
 };
 
 window.addEventListener('DOMContentLoaded', () => {
   AdManager.initialize();
 });
+
+   
 
   /* =====================================================================
      SOUND MANAGER — synthesized SFX + ambient background music
