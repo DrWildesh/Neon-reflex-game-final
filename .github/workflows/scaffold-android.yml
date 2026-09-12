@@ -46,6 +46,7 @@ jobs:
           EOF
           cat "$MANIFEST"
 
+
       - name: Commit generated Android project
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
