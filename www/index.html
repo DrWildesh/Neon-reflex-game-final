@@ -388,11 +388,12 @@
      at the right moments without touching any other game code.
   ===================================================================== */
   
+
 const AD_STRATEGY = {
-  // 🛠️ Swap these with your actual live production Ad Unit IDs
-  ADMOB_BANNER_ID: 'ca-app-pub-7429886592096633/5636722019,       
+  // 🛠️ Your real production Ad Unit IDs go here
+  ADMOB_BANNER_ID: 'ca-app-pub-7429886592096633/5636722019',       
   ADMOB_INTERSTITIAL_ID: 'ca-app-pub-7429886592096633/2678164994',
-  ADMOB_REWARDED_ID: 'ca-app-pub-7429886592096633/7738919984'
+  ADMOB_REWARDED_ID: 'ca-app-pub-7429886592096633/7738919984'     
 };
 
 const AdManager = {
@@ -408,27 +409,30 @@ const AdManager = {
     }
     
     try {
+      // ⚡ FIX 1: Run the initialization independently without blocking execution
       await AdMob.initialize({ 
-        // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
-        initializeForTesting: false,
-        // ✅ YOUR SAFE TEST DOOR: Because your phone ID is registered here,
-        // Google will automatically give YOU test ads, while real users get live ads.
+        initializeForTesting: false, // production mode
         testingDevices: ['6efb81b2c80e414991bab0d8b480f166'] 
       });
+      
+      console.log("AdMob Initialized successfully.");
 
-      // Auto-show standard adaptive banner
-      await AdMob.showBanner({
-        adId: AD_STRATEGY.ADMOB_BANNER_ID, 
-        adSize: 'ADAPTIVE_BANNER',
-        position: 'BOTTOM_CENTER',
-        isTesting: false // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
-      });
+      // ⚡ FIX 2: If a production ad request fails, don't crash or block preloading
+      try {
+        await AdMob.showBanner({
+          adId: AD_STRATEGY.ADMOB_BANNER_ID, 
+          adSize: 'ADAPTIVE_BANNER',
+          position: 'BOTTOM_CENTER',
+          isTesting: false 
+        });
+      } catch (bannerError) {
+        console.warn("Production Banner failed to show. AdMob might still be provisioning: ", bannerError);
+      }
 
-      // Background preload multi-screen ads
       this.preloadInterstitial();
       this.preloadRewardedAd();
     } catch(e) { 
-      console.error("AdMob Init Failed:", e); 
+      console.error("AdMob Config Error:", e); 
     }
   },
 
@@ -437,11 +441,10 @@ const AdManager = {
     const AdMob = this._admob();
     if (!AdMob) return;
     try {
-      await AdMob.prepareInterstitial({ 
-        adId: AD_STRATEGY.ADMOB_INTERSTITIAL_ID, 
-        isTesting: false // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
-      });
-    } catch(e) {}
+      await AdMob.prepareInterstitial({ adId: AD_STRATEGY.ADMOB_INTERSTITIAL_ID, isTesting: false });
+    } catch(e) {
+      console.warn("Interstitial preload failed: ", e);
+    }
   },
 
   async showInterstitial(onClosed) {
@@ -464,14 +467,13 @@ const AdManager = {
     const AdMob = this._admob();
     if (!AdMob) return;
     try {
-      // Requests and holds a single full-screen rewarded ad unit in device memory
       await AdMob.prepareRewardVideoAd({ 
         adId: AD_STRATEGY.ADMOB_REWARDED_ID, 
-        isTesting: false // 🚨 CRITICAL CHANGE FOR PRODUCTION: Set this to false
+        isTesting: false 
       });
       console.log("Rewarded ad preloaded successfully.");
     } catch(e) {
-      console.error("Error preloading rewarded video ad:", e);
+      console.warn("Rewarded preload failed: ", e);
     }
   },
 
@@ -485,37 +487,32 @@ const AdManager = {
 
     try {
       console.log("Launching rewarded ad window...");
-      
-      // Modern Capacitor AdMob directly returns the reward item upon successful viewing completion
       const rewardItem = await AdMob.showRewardVideoAd();
-      
-      // Auto-prefetch the next ad in the background while user resumes play
       this.preloadRewardedAd();
 
-      // If a valid reward item containing an amount was passed back, grant the reward
       if (rewardItem && (rewardItem.amount > 0 || rewardItem.type)) {
         console.log("Reward successfully verified by native return:", rewardItem);
         if (onRewardEarned) onRewardEarned(rewardItem);
       } else {
-        // Fallback if the object returns empty or zero-value
         console.warn("Ad window closed or skipped without valid reward payload.");
         if (onAdFailedOrClosed) onAdFailedOrClosed();
       }
 
     } catch(error) {
       console.error("User dismissed ad early or native player crashed:", error);
-      
-      // Prefetch a fresh ad to recover for their next attempt
       this.preloadRewardedAd(); 
-      
       if (onAdFailedOrClosed) onAdFailedOrClosed();
     }
   }
 };
 
+// ⚡ FIX 3: Safely run AdMob on a separate execution thread so the game can launch instantly
 window.addEventListener('DOMContentLoaded', () => {
-  AdManager.initialize();
+  setTimeout(() => {
+    AdManager.initialize();
+  }, 100); 
 });
+
 
    
 
