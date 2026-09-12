@@ -36,20 +36,51 @@ jobs:
       - name: Generate App Icons
         run: npx @capacitor/assets generate --android
 
-      - name: Inject AdMob App ID
+            - name: Inject AdMob App ID
+        env:
+          # 🛠️ FOR FUTURE APPS: Change this production ID string only
+          PRODUCTION_ADMOB_APP_ID: "ca-app-pub-7429886592096633~7084313869"
         run: |
           node -e "
           const fs = require('fs');
           const path = 'android/app/src/main/AndroidManifest.xml';
+          
+          // Determine target ID: Fallback to official Google Test ID if production variable is default or empty
+          let targetAppId = process.env.PRODUCTION_ADMOB_APP_ID;
+          if (!targetAppId || targetAppId.includes('XXXXXXXXXX') || targetAppId.trim() === '') {
+            targetAppId = 'ca-app-pub-3940256099942544~3347511713';
+            console.log('⚠️ Production ID not configured. Using Google AdMob Test App ID.');
+          } else {
+            console.log('✅ Injecting Production AdMob App ID.');
+          }
+
           if (fs.existsSync(path)) {
             let m = fs.readFileSync(path, 'utf8');
+            
+            // 1. If the meta-data tag is completely missing, inject it cleanly
             if (!m.includes('com.google.android.gms.ads.APPLICATION_ID')) {
-              const metaAdmob = '\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"ca-app-pub-3940256099942544~3347511713\"/>';
+              const metaAdmob = '\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"' + targetAppId + '\"/>';
               m = m.replace('</application>', metaAdmob + '\n    </application>');
               fs.writeFileSync(path, m, 'utf8');
+              console.log('🎉 Successfully injected AdMob configurations.');
+            } 
+            // 2. If the scaffold workflow already injected a test ID, replace it with the production ID inline
+            else if (targetAppId !== 'ca-app-pub-3940256099942544~3347511713') {
+              const testId = 'ca-app-pub-3940256099942544~3347511713';
+              if (m.includes(testId)) {
+                m = m.replace(testId, targetAppId);
+                fs.writeFileSync(path, m, 'utf8');
+                console.log('🔄 Replaced existing Scaffold Test ID with Production App ID.');
+              }
+            } else {
+              console.log('ℹ️ Manifest already contains a valid AdMob App ID setup. Skipping.');
             }
+          } else {
+            console.error('❌ Error: AndroidManifest.xml path not found.');
+            process.exit(1);
           }
           "
+
 
       - name: Sync Native Assets
         run: npx cap sync android
