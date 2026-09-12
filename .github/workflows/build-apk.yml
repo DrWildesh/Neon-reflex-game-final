@@ -36,7 +36,7 @@ jobs:
       - name: Generate App Icons
         run: npx @capacitor/assets generate --android
 
-            - name: Inject AdMob App ID
+      - name: Inject AdMob App ID
         env:
           # 🛠️ FOR FUTURE APPS: Change this production ID string only
           PRODUCTION_ADMOB_APP_ID: "ca-app-pub-7429886592096633~7084313869"
