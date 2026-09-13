@@ -85,55 +85,45 @@ jobs:
       - name: Sync Native Assets
         run: npx cap sync android
 
-      # 📱 MOBILE WORKAROUND: Generates a brand new, valid keystore on the fly inside the cloud runner
+      # 📱 MOBILE WORKAROUND: Generates the keystore directly into the Capacitor android runtime directory
       - name: Generate Production Keystore File
         run: |
           keytool -genkey -v \
-            -keystore release.keystore \
-            -alias ${{ secrets.KEY_ALIAS }} \
+            -keystore android/app/release.keystore \
+            -alias "${{ secrets.KEY_ALIAS }}" \
             -keyalg RSA \
             -keysize 2048 \
             -validity 18250 \
-            -storepass ${{ secrets.KEYSTORE_PASSWORD }} \
-            -keypass ${{ secrets.KEY_PASSWORD }} \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}" \
             -dname "CN=NeonReflexClicker, OU=GAMING, O=GASANAA, L=THIRUVANANTHAPURAM, S=KERALA, C=IN"
 
-      - name: Compile Native Android Release Package Binary
+      # 🛠️ NATIVE BYPASS: Injects signing values straight into Gradle, bypassing third-party actions
+      - name: Compile and Sign Native Android Release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon
-
-      # Cryptographically signs the generated APK using the keystore built in the previous step
-      - name: Sign Release APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: android/app/build/outputs/apk/release
-          signingKeyBase64: "" # Skipped because we point directly to the local file below
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "34.0.0"
-          # Points the signer tool directly to our freshly generated local keystore
-          SIGNING_KEY_STORE_PATH: ${{ github.workspace }}/release.keystore
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=release.keystore \
+            -Pandroid.injected.signing.store.password="${{ secrets.KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
 
       - name: Upload Signed Artifact
         uses: actions/upload-artifact@v4
         with:
           name: neon-reflex-signed-apk
-          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
+          path: android/app/build/outputs/apk/release/app-release.apk
 
       - name: Auto Tag & Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "Neon Reflex Signed Build #${{ github.run_number }}"
-          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
+          files: android/app/build/outputs/apk/release/app-release.apk
 
       - name: Archive Keystore for Safe Keeping
         uses: actions/upload-artifact@v4
         with:
           name: neon-reflex-permanent-key
-          path: release.keystore
+          path: android/app/release.keystore
