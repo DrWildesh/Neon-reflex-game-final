@@ -85,21 +85,55 @@ jobs:
       - name: Sync Native Assets
         run: npx cap sync android
 
-      - name: Build Debug APK
+      # 📱 MOBILE WORKAROUND: Generates a brand new, valid keystore on the fly inside the cloud runner
+      - name: Generate Production Keystore File
+        run: |
+          keytool -genkey -v \
+            -keystore release.keystore \
+            -alias ${{ secrets.KEY_ALIAS }} \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 18250 \
+            -storepass ${{ secrets.KEYSTORE_PASSWORD }} \
+            -keypass ${{ secrets.KEY_PASSWORD }} \
+            -dname "CN=NeonReflexClicker, OU=GAMING, O=GASANAA, L=THIRUVANANTHAPURAM, S=KERALA, C=IN"
+
+      - name: Compile Native Android Release Package Binary
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Upload Artifact
+      # Cryptographically signs the generated APK using the keystore built in the previous step
+      - name: Sign Release APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKeyBase64: "" # Skipped because we point directly to the local file below
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: "34.0.0"
+          # Points the signer tool directly to our freshly generated local keystore
+          SIGNING_KEY_STORE_PATH: "../../../release.keystore"
+
+      - name: Upload Signed Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: neon-reflex-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: neon-reflex-signed-apk
+          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
 
-      - name: Auto Tag & Release
+      - name: Auto Tag & Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: "Neon Reflex build #${{ github.run_number }}"
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          name: "Neon Reflex Signed Build #${{ github.run_number }}"
+          files: ${{ steps.sign_app.outputs.signedReleaseFile }}
+
+      - name: Archive Keystore for Safe Keeping
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-reflex-permanent-key
+          path: release.keystore
