@@ -22,6 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          # ✕ REMOVED cache: 'npm' to prevent the lock file requirement error
 
       - uses: actions/setup-java@v4
         with:
@@ -37,12 +38,14 @@ jobs:
 
       - name: Inject AdMob App ID
         env:
+          # 🛠️ FOR FUTURE APPS: Change this production ID string only
           PRODUCTION_ADMOB_APP_ID: "ca-app-pub-7429886592096633~7084313869"
         run: |
           node -e "
           const fs = require('fs');
           const path = 'android/app/src/main/AndroidManifest.xml';
           
+          // Determine target ID: Fallback to official Google Test ID if production variable is default or empty
           let targetAppId = process.env.PRODUCTION_ADMOB_APP_ID;
           if (!targetAppId || targetAppId.includes('XXXXXXXXXX') || targetAppId.trim() === '') {
             targetAppId = 'ca-app-pub-3940256099942544~3347511713';
@@ -54,12 +57,14 @@ jobs:
           if (fs.existsSync(path)) {
             let m = fs.readFileSync(path, 'utf8');
             
+            // 1. If the meta-data tag is completely missing, inject it cleanly
             if (!m.includes('com.google.android.gms.ads.APPLICATION_ID')) {
               const metaAdmob = '\n        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"' + targetAppId + '\"/>';
               m = m.replace('</application>', metaAdmob + '\n    </application>');
               fs.writeFileSync(path, m, 'utf8');
               console.log('🎉 Successfully injected AdMob configurations.');
             } 
+            // 2. If the scaffold workflow already injected a test ID, replace it with the production ID inline
             else if (targetAppId !== 'ca-app-pub-3940256099942544~3347511713') {
               const testId = 'ca-app-pub-3940256099942544~3347511713';
               if (m.includes(testId)) {
@@ -76,12 +81,12 @@ jobs:
           }
           "
 
+
       - name: Sync Native Assets
         run: npx cap sync android
 
-      # 📱 FIRST BUILD: Generate keystore if KEYSTORE_BASE64 secret doesn't exist
-      - name: Generate Production Keystore File (First Build Only)
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+      # 📱 MOBILE WORKAROUND: Generates a brand new, valid keystore on the fly inside the cloud runner
+      - name: Generate Production Keystore File
         run: |
           keytool -genkey -v \
             -keystore release.keystore \
@@ -93,30 +98,25 @@ jobs:
             -keypass ${{ secrets.KEY_PASSWORD }} \
             -dname "CN=NeonReflexClicker, OU=GAMING, O=GASANAA, L=THIRUVANANTHAPURAM, S=KERALA, C=IN"
 
-      # Decode Base64 keystore for subsequent builds
-      - name: Decode Keystore from Base64 (Subsequent Builds)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
-
       - name: Compile Native Android Release Package Binary
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon
 
-      # Cryptographically signs the generated APK using the keystore
+      # Cryptographically signs the generated APK using the keystore built in the previous step
       - name: Sign Release APK
         uses: r0adkll/sign-android-release@v1
         id: sign_app
         with:
           releaseDirectory: android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 == '' && 'TO_BE_CAPTURED' || secrets.KEYSTORE_BASE64 }}
+          signingKeyBase64: "" # Skipped because we point directly to the local file below
           alias: ${{ secrets.KEY_ALIAS }}
           keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
+          # Points the signer tool directly to our freshly generated local keystore
           SIGNING_KEY_STORE_PATH: ${{ github.workspace }}/release.keystore
 
       - name: Upload Signed Artifact
@@ -131,16 +131,6 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: "Neon Reflex Signed Build #${{ github.run_number }}"
           files: ${{ steps.sign_app.outputs.signedReleaseFile }}
-
-      # 🔐 CAPTURE BASE64 FOR FUTURE BUILDS (First build only)
-      - name: Capture & Encode Keystore for Future Builds
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
-        run: |
-          echo "⚠️ IMPORTANT: Copy the base64 string below and add it as a GitHub Secret named 'KEYSTORE_BASE64'"
-          echo "========================================="
-          base64 release.keystore
-          echo "========================================="
-          echo "Then future builds will automatically reuse this keystore."
 
       - name: Archive Keystore for Safe Keeping
         uses: actions/upload-artifact@v4
