@@ -1,6 +1,6 @@
 {
-  "appId": "com.neonstudio.reflex",
-  "appName": "Neon Reflex",
+  "appId": "com.gasanaa.neonreflexclicker",
+  "appName": "Neon Reflex Clicker",
   "webDir": "www",
   "android": {
     "allowMixedContent": false
