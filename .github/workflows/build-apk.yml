@@ -117,7 +117,7 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
           # Points the signer tool directly to our freshly generated local keystore
-          SIGNING_KEY_STORE_PATH: "../../../release.keystore"
+          SIGNING_KEY_STORE_PATH: "../../release.keystore"
 
       - name: Upload Signed Artifact
         uses: actions/upload-artifact@v4
